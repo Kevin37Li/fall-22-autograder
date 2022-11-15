@@ -1,18 +1,56 @@
-from enum import Enum
+# from enum import Enum
+import copy
 from intbase import InterpreterBase, ErrorType
 from tokenize import Tokenizer
 # from env_v1 import EnvironmentManager
 # from func_v1 import FunctionManager
 
 # Enumerated type for our different language data types
-class Type(Enum):
-  INT = 1
-  BOOL = 2
-  STRING = 3
-  REFINT = 4
-  REFBOOL = 5
-  REFSTRING = 6
-  VOID = 7
+class Type():
+  # INT = 1
+  # BOOL = 2
+  # STRING = 3
+  # REFINT = 4
+  # REFBOOL = 5
+  # REFSTRING = 6
+  # VOID = 7
+
+  def __init__(self, name):
+    match name:
+      case InterpreterBase.INT_DEF: 
+        self.name = InterpreterBase.INT_DEF
+        self.value = 1
+      case InterpreterBase.BOOL_DEF:
+        self.name = InterpreterBase.BOOL_DEF
+        self.value = 2
+      case InterpreterBase.STRING_DEF:
+        self.name = InterpreterBase.STRING_DEF
+        self.value = 3
+      case InterpreterBase.REFINT_DEF:
+        self.name = InterpreterBase.REFINT_DEF
+        self.value = 1
+      case InterpreterBase.REFBOOL_DEF:
+        self.name = InterpreterBase.REFBOOL_DEF
+        self.value = 2
+      case InterpreterBase.REFSTRING_DEF:
+        self.name = InterpreterBase.REFSTRING_DEF
+        self.value = 3
+      case InterpreterBase.VOID_DEF:
+        self.name = InterpreterBase.VOID_DEF
+        self.value = 4
+
+  def __eq__(self, other):
+    return self.value == other.value
+
+  def __hash__(self):
+    return hash(self.value)
+
+  def __str__(self):
+    return self.name
+
+  def is_ref_type(self):
+    return "ref" in self.name
+  
 
 # Represents a value, which has a type and its value
 class Value:
@@ -89,17 +127,17 @@ class FunctionManager:
             pname, parameter_type = token.split(":")
             match parameter_type:
               case InterpreterBase.INT_DEF: 
-                ptype = Type.INT
+                ptype = Type(InterpreterBase.INT_DEF)
               case InterpreterBase.BOOL_DEF:
-                ptype = Type.BOOL
+                ptype = Type(InterpreterBase.BOOL_DEF)
               case InterpreterBase.STRING_DEF:
-                ptype = Type.STRING
+                ptype = Type(InterpreterBase.STRING_DEF)
               case InterpreterBase.REFINT_DEF:
-                ptype = Type.REFINT
+                ptype = Type(InterpreterBase.REFINT_DEF)
               case InterpreterBase.REFBOOL_DEF:
-                ptype = Type.REFBOOL
+                ptype = Type(InterpreterBase.REFBOOL_DEF)
               case InterpreterBase.REFSTRING_DEF:
-                ptype = Type.REFSTRING
+                ptype = Type(InterpreterBase.REFSTRING_DEF)
 
             func_info.func_scope.set(pname, Value(ptype))
             func_info.param_order.append(pname)
@@ -107,13 +145,13 @@ class FunctionManager:
           else:
             match token:
               case InterpreterBase.INT_DEF: 
-                rtype = Type.INT
+                rtype = Type(InterpreterBase.INT_DEF)
               case InterpreterBase.BOOL_DEF:
-                rtype = Type.BOOL
+                rtype = Type(InterpreterBase.BOOL_DEF)
               case InterpreterBase.STRING_DEF:
-                rtype = Type.STRING
+                rtype = Type(InterpreterBase.STRING_DEF)
               case InterpreterBase.VOID_DEF:
-                rtype = Type.VOID
+                rtype = Type(InterpreterBase.VOID_DEF)
 
         func_info.return_type = rtype
         self.func_cache[func_name] = func_info
@@ -138,7 +176,7 @@ class Interpreter(InterpreterBase):
     self._compute_indentation(program)  # determine indentation of every line
     self.tokenized_program = Tokenizer.tokenize_program(program)
     self.func_manager = FunctionManager(self.tokenized_program)
-    main_info = self._get_func_info(InterpreterBase.MAIN_FUNC)
+    main_info = copy.deepcopy(self._get_func_info(InterpreterBase.MAIN_FUNC))
     self.ip = main_info.start_ip
     self.return_stack = []
     self.terminate = False
@@ -193,19 +231,21 @@ class Interpreter(InterpreterBase):
 
     type = args[0]
     match type:
-      case "int":
-        value_type = Value(Type.INT, 0)
-      case "bool":
-        value_type = Value(Type.BOOL, False)
-      case "string":
-        value_type = Value(Type.STRING, "")
+      case InterpreterBase.INT_DEF:
+        value_type = Value(Type(InterpreterBase.INT_DEF), 0)
+      case InterpreterBase.BOOL_DEF:
+        value_type = Value(Type(InterpreterBase.BOOL_DEF), False)
+      case InterpreterBase.STRING_DEF:
+        value_type = Value(Type(InterpreterBase.STRING_DEF), "")
       case default:
         super().error(ErrorType.TYPE_ERROR, f"Invalid type {type} in var statement", self.ip)
 
+    scope = self._get_current_func_scope_chain()[-1]
     for vname in args[1:]:
       if self._is_redefined(vname):
         super().error(ErrorType.NAME_ERROR, f"variable ({vname}) is redefined in the same block", self.ip)
-      self._set_value(vname, value_type, self._get_current_func_scope_chain()[-1])
+
+      scope.set(vname, value_type)
 
     self._advance_to_next_statement()
 
@@ -221,23 +261,33 @@ class Interpreter(InterpreterBase):
     return True
 
   def _where_defined(self, vname):
-    if self.trace_output:
-      print(len(self._get_current_func_scope_chain()))
-    for scope in reversed(self._get_current_func_scope_chain()):
-      if self.trace_output:
-        print(scope.environment)
+    # if self.trace_output:
+      # print(len(self._get_current_func_scope_chain()))
+    for index, scope in enumerate(reversed(self._get_current_func_scope_chain())):
+      # if self.trace_output:
+        # print(scope.environment)
       if scope.has(vname):
-        return scope
+        return len(self._get_current_func_scope_chain())-1-index, scope
     super().error(ErrorType.NAME_ERROR, f"the variable ({vname}) refered is not defined yet", self.ip)
-
     
   def _assign(self, tokens):
    if len(tokens) < 2:
      super().error(ErrorType.SYNTAX_ERROR,"Invalid assignment statement") #no
    vname = tokens[0]
-   scope = self._where_defined(vname)
-   value_type = self._eval_expression(tokens[1:])
-   self._set_value(vname, value_type, scope)
+   _, scope = self._where_defined(vname)
+   var_value = scope.get(vname)
+   if type(var_value) is tuple:
+    vtype = self._dereference(var_value).type()
+   elif type(var_value) is Value:
+    vtype = var_value.type()
+   else:
+    super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the variable name ({vname})")
+
+   value_to_assign = self._eval_expression(tokens[1:])
+   if vtype != value_to_assign.type():
+    super().error(ErrorType.TYPE_ERROR, f"Variable ({vname}) is of the type {vtype}, can't be assigned with the value of the type ({value_to_assign.type()})", self.ip)
+
+   self._set_value(vname, value_to_assign, scope)
    self._advance_to_next_statement()
 
   def _funccall(self, args):
@@ -253,12 +303,11 @@ class Interpreter(InterpreterBase):
       self._strtoint(args[1:])
       self._advance_to_next_statement()
     else:
-      func_info = self._get_func_info(args[0])
+      func_info = copy.deepcopy(self._get_func_info(args[0]))
 
       if len(func_info.param_order) != len(args[1:]):
         super().error(ErrorType.NAME_ERROR, f"The number of arguments to function call ({args[0]}) doesn't match the number of formal parameters", self.ip)
-      func_info.return_addr = self.ip+1
-      self.ip = func_info.start_ip
+
 
       arguments = args[1:]
       for param_pos, arg in enumerate(arguments):
@@ -266,32 +315,73 @@ class Interpreter(InterpreterBase):
         param_value_type = func_info.func_scope.get(pname)
         if param_value_type == None:
           super().error(ErrorType.NAME_ERROR, f"Unknown parameter name ({pname})", self.ip)
-        ptype = param_value_type.type()
-        if self.trace_output:
-          print(f"The parameter {pname} of type ({ptype.name}) in function ({args[0]})")
+        if type(param_value_type) is tuple:
+          ptype = self._dereference(param_value_type).type()
+        elif type(param_value_type) is Value:
+          ptype = param_value_type.type()
+        else:
+          super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the parameter name ({pname})", self.ip)
+          # param_value_type = self._dereference(param_value_type)
+        # ptype = param_value_type.type()
+        # if self.trace_output:
+          # print(f"The parameter {pname} of type ({ptype}) in function ({args[0]})")
+
+        value = self._get_value(arg)
+
+        if type(value) is Value:
+          vtype = value.type()
+        elif type(value) is tuple:
+          vtype = self._dereference(value).type()
+        else:
+          super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the variable name ({arg})", self.ip)
+
+        if vtype != ptype:
+          super().error(ErrorType.TYPE_ERROR, f"The argument type of ({vtype}) is not compatible with the parameter type of ({ptype}) for function ({args[0]})", self.ip)
+
         # pass by reference
-        if "REF" in ptype.name and not self._is_constant(arg):
-          func_info.func_scope.set(pname, self._get_value(arg))
+        if (type(param_value_type) is tuple or ptype.is_ref_type()) and not self._is_constant(arg):
+          # if self.trace_output:
+            # print(f"The parameter {pname} has been passed by reference")
+
+            if type(value) is Value:
+              index_to_scope, _ = self._where_defined(arg)
+              func_info.func_scope.set(pname, (len(self.env_manager)-1, index_to_scope, arg))
+            elif type(value) is tuple:
+              func_info.func_scope.set(pname, value)
+            else:
+              super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the variable name ({arg})")
+
+
         # pass by value
         else:
-          func_info.func_scope.set(pname, Value().set(self._get_value(arg)))
+          if type(value) is Value:
+            func_info.func_scope.set(pname, value)
+          elif type(value) is tuple:
+            func_info.func_scope.set(pname, self._dereference(value))
+          else:
+            super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the variable name ({arg})")
+      
+      func_info.return_addr = self.ip+1
+      self.ip = func_info.start_ip
 
+      if self.trace_output:
+        print(f"The return address for the function call ({args[0]}) is ({func_info.return_addr})")
+      
       self.env_manager.append([func_info.func_scope]) 
       self.return_stack.append(func_info)    
 
   def _endfunc(self):
-    callee_func_info = self.return_stack.pop()
-    self.env_manager.pop()
-    if not self.return_stack:  # done with main!
-      self.terminate = True
-    else:
-      self.ip = callee_func_info.return_addr
+
+    if self.trace_output:
+      print(self.return_stack)
+
+    self._return([])
 
   def _if(self, args):
     if not args:
       super().error(ErrorType.SYNTAX_ERROR,"Invalid if syntax", self.ip) #no
     value_type = self._eval_expression(args)
-    if value_type.type() != Type.BOOL:
+    if value_type.type() != Type(InterpreterBase.BOOL_DEF):
       super().error(ErrorType.TYPE_ERROR,"Non-boolean if expression", self.ip) #!
     if value_type.value():
       self._get_current_func_scope_chain().append(EnvironmentManager())
@@ -326,40 +416,53 @@ class Interpreter(InterpreterBase):
     super().error(ErrorType.SYNTAX_ERROR,"Missing endif", self.ip) #no
 
   def _return(self,args):
-    if not args:
-      self._endfunc()
-      return
-
-    value_type = self._eval_expression(args)
     callee_func_info = self.return_stack.pop()
+    if args:
+      value_type = self._eval_expression(args)
 
-    if value_type.type() != callee_func_info.return_type:
-      super().error(ErrorType.TYPE_ERROR, f"The return value at line ({self.ip}) is not compatible with the return type of the function", self.ip)
+      if value_type.type() != callee_func_info.return_type:
+        super().error(ErrorType.TYPE_ERROR, f"The return value at line ({self.ip}) is not compatible with the return type of the function", self.ip)
 
-    caller_func_info = self._get_current_func_info()
-    self._set_return_value(value_type, caller_func_info.func_scope)
 
-    self.ip = callee_func_info.return_addr
+    else:
+      if callee_func_info.return_type == Type(InterpreterBase.INT_DEF):
+        value_type = Value(Type(InterpreterBase.INT_DEF), 0)
+      elif callee_func_info.return_type == Type(InterpreterBase.BOOL_DEF):
+        value_type = Value(Type(InterpreterBase.BOOL_DEF), False)
+      elif callee_func_info.return_type == Type(InterpreterBase.STRING_DEF):
+        value_type = Value(Type(InterpreterBase.STRING_DEF), "")
+
+    if callee_func_info.return_type != Type(InterpreterBase.VOID_DEF): 
+      caller_func_info = self._get_current_func_info()
+      self._set_return_value(value_type, caller_func_info.func_scope)
+
+      if self.trace_output:
+        print(f"the caller function top level scope is ({caller_func_info.func_scope.environment})")
+        print(f"the callee function top level scope is ({callee_func_info.func_scope.environment})")
+
     self.env_manager.pop()
+    if not self.return_stack:  # done with main!
+      self.terminate = True
+    else:
+      self.ip = callee_func_info.return_addr
 
 
   def _set_return_value(self, value_type, scope):
-    match value_type.type():
-      case Type.INT:
-        self._set_value(Interpreter.RESULTI_DEF, value_type, scope)
-      case Type.BOOL:
-        self._set_value(Interpreter.RESULTB_DEF, value_type, scope)
-      case Type.STRING:
-        self._set_value(Interpreter.RESULTS_DEF, value_type, scope)
-      case default:
-        super().error(ErrorType.TYPE_ERROR, f"Unknown type {value_type.type()} for the return value at ({self.ip})")
+    if value_type.type() == Type(InterpreterBase.INT_DEF):
+      scope.set(Interpreter.RESULTI_DEF, value_type)
+    elif value_type.type() == Type(InterpreterBase.BOOL_DEF):
+      scope.set(Interpreter.RESULTB_DEF, value_type)
+    elif value_type.type() == Type(InterpreterBase.STRING_DEF):
+      scope.set(Interpreter.RESULTS_DEF, value_type)
+    else:
+      super().error(ErrorType.TYPE_ERROR, f"Unknown type {value_type.type()} for the return value at ({self.ip})", self.ip)
 
 
   def _while(self, args):
     if not args:
       super().error(ErrorType.SYNTAX_ERROR,"Missing while expression", self.ip) #no
     value_type = self._eval_expression(args)
-    if value_type.type() != Type.BOOL:
+    if value_type.type() != Type(InterpreterBase.BOOL_DEF):
       super().error(ErrorType.TYPE_ERROR,"Non-boolean while expression", self.ip) #!
     if value_type.value() == False:
       self._exit_while()
@@ -383,6 +486,13 @@ class Interpreter(InterpreterBase):
     super().error(ErrorType.SYNTAX_ERROR,"Missing endwhile", self.ip) #no
 
   def _endwhile(self, args):
+    
+
+
+    # if self.trace_output:
+    #   print(f"the current ip is on ({self.ip})")
+
+
     self._get_current_func_scope_chain().pop()
     while_indent = self.indents[self.ip]
     cur_line = self.ip - 1
@@ -402,6 +512,8 @@ class Interpreter(InterpreterBase):
     out = []
     for arg in args:
       val_type = self._get_value(arg)
+      if type(val_type) is tuple:
+        val_type = self._dereference(val_type)
       out.append(str(val_type.value()))
     super().output(''.join(out))
 
@@ -409,15 +521,17 @@ class Interpreter(InterpreterBase):
     if args:
       self._print(args)
     result = super().get_input()
-    self._set_return_value(Value(Type.STRING, result), self._get_current_func_info.func_scope)
+    self._set_return_value(Value(Type(InterpreterBase.STRING_DEF), result), self._get_current_func_info().func_scope)
 
   def _strtoint(self, args):
     if len(args) != 1:
       super().error(ErrorType.SYNTAX_ERROR,"Invalid strtoint call syntax", self.ip) #no
     value_type = self._get_value(args[0])
-    if value_type.type() != Type.STRING:
+    if type(value_type) is tuple:
+      value_type = self._dereference(value_type)
+    if value_type.type() != Type(InterpreterBase.STRING_DEF):
       super().error(ErrorType.TYPE_ERROR,"Non-string passed to strtoint", self.ip) #!
-    self._set_return_value(Value(Type.INT, int(value_type.value())), self._get_current_func_info.func_scope)
+    self._set_return_value(Value(Type(InterpreterBase.INT_DEF), int(value_type.value())), self._get_current_func_info().func_scope)
 
   def _advance_to_next_statement(self):
     # for now just increment IP, but later deal with loops, returns, end of functions, etc.
@@ -427,33 +541,33 @@ class Interpreter(InterpreterBase):
   def _setup_operations(self):
     self.binary_op_list = ['+','-','*','/','%','==','!=', '<', '<=', '>', '>=', '&', '|']
     self.binary_ops = {}
-    self.binary_ops[Type.INT] = {
-     '+': lambda a,b: Value(Type.INT, a.value()+b.value()),
-     '-': lambda a,b: Value(Type.INT, a.value()-b.value()),
-     '*': lambda a,b: Value(Type.INT, a.value()*b.value()),
-     '/': lambda a,b: Value(Type.INT, a.value()//b.value()),  # // for integer ops
-     '%': lambda a,b: Value(Type.INT, a.value()%b.value()),
-     '==': lambda a,b: Value(Type.BOOL, a.value()==b.value()),
-     '!=': lambda a,b: Value(Type.BOOL, a.value()!=b.value()),
-     '>': lambda a,b: Value(Type.BOOL, a.value()>b.value()),
-     '<': lambda a,b: Value(Type.BOOL, a.value()<b.value()),
-     '>=': lambda a,b: Value(Type.BOOL, a.value()>=b.value()),
-     '<=': lambda a,b: Value(Type.BOOL, a.value()<=b.value()),
+    self.binary_ops[Type(InterpreterBase.INT_DEF)] = {
+     '+': lambda a,b: Value(Type(InterpreterBase.INT_DEF), a.value()+b.value()),
+     '-': lambda a,b: Value(Type(InterpreterBase.INT_DEF), a.value()-b.value()),
+     '*': lambda a,b: Value(Type(InterpreterBase.INT_DEF), a.value()*b.value()),
+     '/': lambda a,b: Value(Type(InterpreterBase.INT_DEF), a.value()//b.value()),  # // for integer ops
+     '%': lambda a,b: Value(Type(InterpreterBase.INT_DEF), a.value()%b.value()),
+     '==': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()==b.value()),
+     '!=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()!=b.value()),
+     '>': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()>b.value()),
+     '<': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()<b.value()),
+     '>=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()>=b.value()),
+     '<=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()<=b.value()),
     }
-    self.binary_ops[Type.STRING] = {
-     '+': lambda a,b: Value(Type.STRING, a.value()+b.value()),
-     '==': lambda a,b: Value(Type.BOOL, a.value()==b.value()),
-     '!=': lambda a,b: Value(Type.BOOL, a.value()!=b.value()),
-     '>': lambda a,b: Value(Type.BOOL, a.value()>b.value()),
-     '<': lambda a,b: Value(Type.BOOL, a.value()<b.value()),
-     '>=': lambda a,b: Value(Type.BOOL, a.value()>=b.value()),
-     '<=': lambda a,b: Value(Type.BOOL, a.value()<=b.value()),
+    self.binary_ops[Type(InterpreterBase.STRING_DEF)] = {
+     '+': lambda a,b: Value(Type(InterpreterBase.STRING_DEF), a.value()+b.value()),
+     '==': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()==b.value()),
+     '!=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()!=b.value()),
+     '>': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()>b.value()),
+     '<': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()<b.value()),
+     '>=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()>=b.value()),
+     '<=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()<=b.value()),
     }
-    self.binary_ops[Type.BOOL] = {
-     '&': lambda a,b: Value(Type.BOOL, a.value() and b.value()),
-     '==': lambda a,b: Value(Type.BOOL, a.value()==b.value()),
-     '!=': lambda a,b: Value(Type.BOOL, a.value()!=b.value()),
-     '|': lambda a,b: Value(Type.BOOL, a.value() or b.value())
+    self.binary_ops[Type(InterpreterBase.BOOL_DEF)] = {
+     '&': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value() and b.value()),
+     '==': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()==b.value()),
+     '!=': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value()!=b.value()),
+     '|': lambda a,b: Value(Type(InterpreterBase.BOOL_DEF), a.value() or b.value())
     }
 
   def _compute_indentation(self, program):
@@ -476,19 +590,34 @@ class Interpreter(InterpreterBase):
     if not token:
       super().error(ErrorType.NAME_ERROR,f"Empty token", self.ip) #no
     if token[0] == '"':
-      return Value(Type.STRING, token.strip('"'))
+      return Value(Type(InterpreterBase.STRING_DEF), token.strip('"'))
     if token.isdigit() or token[0] == '-':
-      return Value(Type.INT, int(token))
+      return Value(Type(InterpreterBase.INT_DEF), int(token))
     if token == InterpreterBase.TRUE_DEF or token == InterpreterBase.FALSE_DEF:
-      return Value(Type.BOOL, token == InterpreterBase.TRUE_DEF)
+      return Value(Type(InterpreterBase.BOOL_DEF), token == InterpreterBase.TRUE_DEF)
 
-    scope = self._where_defined(token)
+    _, scope = self._where_defined(token)
     value = scope.get(token)
     return value
 
-  # given a variable name and a Value object, associate the name with the value
+  # given a variable name with what scope that variable resides in and a Value object, associate the name with the value
   def _set_value(self, varname, value_type, scope):
-    scope.set(varname,value_type)
+    var_value = scope.get(varname)
+    if type(var_value) is Value:
+      scope.set(varname, value_type)
+    elif type(var_value) is tuple:
+      index_to_func_scope_chain, index_to_scope, vname = var_value
+      self.env_manager[index_to_func_scope_chain][index_to_scope].set(vname, value_type)
+    else:
+      super().error(ErrorType.TYPE_ERROR, f"Invalid data value stored associate with the variable name ({varname})")
+
+
+  
+
+  def _dereference(self, addr):
+    index_to_func_scope_chain, index_to_scope, vname = addr
+    return self.env_manager[index_to_func_scope_chain][index_to_scope].get(vname)
+
 
   # evaluate expressions in prefix notation: + 5 * 6 x
   def _eval_expression(self, tokens):
@@ -506,11 +635,13 @@ class Interpreter(InterpreterBase):
         stack.append(operations[token](v1,v2))
       elif token == '!':
         v1 = stack.pop()
-        if v1.type() != Type.BOOL:
+        if v1.type() != Type(InterpreterBase.BOOL_DEF):
           super().error(ErrorType.TYPE_ERROR,f"Expecting boolean for ! {v1.type()}", self.ip) #!
-        stack.append(Value(Type.BOOL, not v1.value()))
+        stack.append(Value(Type(InterpreterBase.BOOL_DEF), not v1.value()))
       else:
         value_type = self._get_value(token)
+        if type(value_type) is tuple:
+          value_type = self._dereference(value_type)
         stack.append(value_type)
 
     if len(stack) != 1:
@@ -522,39 +653,64 @@ class Interpreter(InterpreterBase):
 
 
 
-program = [
-"func main void",
-"  var int x",
-"  var string y",
-"  var bool z",
-"  assign x 42",
-"  assign y \"foo\"",
-"  assign z True ",
-"  funccall foo x y z",
-"  funccall print x \" \" y \" \" z",
-"  funccall bletch",
-"  funccall bar resulti",
-"  funccall print resulti",
-"endfunc",
-"",
-"func foo a:refint b:refstring c:refbool void",
-" assign a -42",
-" assign b \"bar\"",
-" assign c False",
-"endfunc",
-"",
-"func bletch int",
-" return 100",
-"endfunc",
-"",
-"func bar a:refint void",
-" assign a -100 ",
-"endfunc"
-]
+# program = [
+# "func main void",
+# "  var bool a",
+# "  assign a True",
+# "  funccall doublemod a",
+# "  funccall print a",
+# "endfunc",
+# "",
+# "func doublemod a:refbool int",
+# "  if a",
+# "     assign a ! a",
+# "     var int b",
+# "     assign b ! True",
+# "  endif",
+# "  return 100",
+# "endfunc"
+# ]
+# program = [
+# "func main void",
+# "  var int a",
+# "  assign a 5",
+# "  if > a 0",
+# "    funccall print a    # prints 5, since a is visible from outer scope",
+# "    var string a        # new a variable shadows our original a ",
+# "    assign a \"foobar\"   ",
+# "    funccall print a    # prints foobar",
+# "  endif",
+# "  funccall print a      # prints 5, since inner-foobar is out of scope",
+# "endfunc",
+# ""
+# ]
 
 
-interpreter = Interpreter(trace_output=True)
-interpreter.run(program)
+
+# program = [
+# "func foo m:int n:int int",
+# "   return + m n",
+# "endfunc",
+# "",
+# "func bar arg:int args:string void # ???",
+# "    return",
+# "endfunc",
+# "",
+# "func main void",
+# "   var int a",
+# "   var string b",
+# "   assign a 10000",
+# "   funccall foo a a # 0 0 is passed",
+# "   funccall print resulti",
+# "   funccall bar a a",
+# "endfunc",
+# ]
+
+
+
+
+# interpreter = Interpreter(trace_output=True)
+# interpreter.run(program)
 
 
 
