@@ -5,4 +5,4 @@ cd /autograder/source
 # Prepare submission
 cp -a /autograder/submission/. /autograder/source/
 
-PROD=True python3 tester.py 1
+PROD=True python3 tester.py 3

@@ -2,7 +2,7 @@
 func main void
  var int a
  funccall foo
-endfunc main
+endfunc
 
 func foo void
  funccall print a

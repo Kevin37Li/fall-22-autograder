@@ -4,7 +4,7 @@ import sys
 import traceback
 from operator import itemgetter
 
-from harness import AbstractTestScaffold, run_all_tests, get_score, write_gradescope_output, exit_after, timeout
+from harness import AbstractTestScaffold, run_all_tests, get_score, write_gradescope_output, exit_after
 
 # TODO: documentation :)
 
@@ -42,7 +42,6 @@ class TestScaffold(AbstractTestScaffold):
     self.interpreter.validate_program(program)
 
   @exit_after(5)
-  @timeout(6) # more aggressive timeout to deal with accidental infinite loops that pauses interrupts
   def run_test_case(self, test_case, environment):
     expect_failure = itemgetter('expect_failure')(test_case)
     expected, program = itemgetter('expected', 'program')(environment)
@@ -93,24 +92,44 @@ def generate_test_case_structure(cases, dir, category='', expect_failure=False, 
   } for i in cases]
 
 # older version for limited test case visibility
-def generate_test_suite_v1(version):
+def generate_test_suite_v1():
+  version = "1"
   return generate_test_case_structure(
     range(1,30+1),
     f'testsv{version}/',
     'Correctness',
     False,
-    lambda x: x in {f'test{i}' for i in [1,2,6,8,10,27,28]} # this just toggles visibility, not relevant for correctness
+    lambda x: x in {f'test{i}' for i in [1,2,6,8,10,27,28]}
   ) + generate_test_case_structure(
     range(1, 20+1),
     f'failsv{version}/',
     'Incorrectness',
     True,
-     lambda x: x in {f'test{i}' for i in [1,7,9]} # this just toggles visibility, not relevant for correctness
+    lambda x: x in {f'test{i}' for i in [1,7,9]}
   )
 
-def generate_test_suite_v2(version):
-  successes = {2, 3, 6, 7, 8, 10, 11, 12, 13, 16, 22, 47, 50, 53, 55}
-  fails = {3, 4, 8, 9, 10, 20, 21, 23, 24, 27}
+def generate_test_suite_v2():
+  version = "2"
+  num_correct = 72
+  num_fails = 53
+  successes = range(1,num_correct+1)
+  fails = range(1,num_fails+1)
+  return generate_test_case_structure(
+    successes,
+    f'testsv{version}/',
+    'Correctness',
+    False,
+  ) + generate_test_case_structure(
+    fails,
+    f'failsv{version}/',
+    'Incorrectness',
+    True,
+  )
+
+def generate_test_suite_v3():
+  version = "3"
+  successes = [20, 22, 37, 112, 113, 114, 122, 127, 140, 156, 201, 202, 203, 204, 205]
+  fails = [26, 27, 29, 30, 105]
   return generate_test_case_structure(
     successes,
     f'testsv{version}/',
@@ -135,9 +154,12 @@ def main():
 
   match version:
     case "1":
-      tests = generate_test_suite_v1(version)
+      tests = generate_test_suite_v1()
     case "2":
-      tests = generate_test_suite_v2(version)
+      tests = generate_test_suite_v2()
+    case "3":
+      tests = generate_test_suite_v3()
+
 
   results = run_all_tests(scaffold, tests)
   total_score = get_score(results) / len(results) * 100.0

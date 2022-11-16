@@ -131,7 +131,9 @@ dmypy.json
 # macOS (shakes fist)
 .DS_Store
 
-# grader-specific files
+# project-specific files - students, feel free to remove these for yourself!
+*v1*.py
 *v2*.py
 *v3*.py
+tokenize.py
 results.json
